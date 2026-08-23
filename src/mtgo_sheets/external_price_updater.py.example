@@ -1,0 +1,18 @@
+from mtgo_sheets.models import ExtPriceMap
+
+
+def update_external_prices(wishlist_path: str) -> ExtPriceMap:
+    """Get updated external prices.
+
+    Returns an ExtPriceMap (see the definition in models.py).
+
+    Implement this function to utilize any external price data sources (from APIs, scrapers, etc.) you have.
+    Additional price sources besides Goatbots' daily dumps can enable the following benefits:
+    - buylist prices
+    - comparisons between vendors
+    - live pricing
+
+    At this time it is not possible to include external prices with this project due to permissions around sharing
+    private API data.
+    """
+    raise NotImplementedError()

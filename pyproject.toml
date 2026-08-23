@@ -1,0 +1,74 @@
+[project]
+name = "MTGO_Sheets"
+version = "0.0.1"
+requires-python = ">=3.13"
+
+dependencies = [
+    "orjson>=3.11.9",
+    "numpy>=2.4.6",
+    "requests>=2.34.2",
+    "xlwings>=0.35.3",
+    "pydantic>=2.13.4",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.20",
+    "pyright>=1.1.411",
+    "ipykernel>=7.2.0",
+    "line_profiler>=5.0.2",
+    "ipykernel>=7.2.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+extend-exclude = ["*.ipynb"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # PEP 8 errors
+    "W",    # PEP 8 warnings
+    "F",    # pyflakes
+    "I",    # import sorting
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "SIM",  # simplifications
+    "C4",   # comprehensions
+    "N",    # naming
+    "ANN",  # type annotations
+    "ARG",  # unused arguments
+    "PL",   # pylint
+    "RUF",  # ruff
+    "PTH",  # pathlib
+    "D",    # docstrings
+    "RET",  # return statements
+]
+
+ignore = ["D100", "D104", "D107", "E731", "PLR2004", "UP015"]
+
+dummy-variable-rgx = "^(_|_.*)$" # Recognize dummy vars like "_"
+
+[tool.ruff.format]
+quote-style = "double"
+skip-magic-trailing-comma = true
+
+[tool.pyright]
+typeCheckingMode = "standard"
+reportMissingImports = true
+enableReachabilityAnalysis = true
+reportUnusedVariable = true
+reportDuplicateImport = true
+reportConstantRedefinition = true
+reportUnnecessaryIsInstance = true
+reportUnnecessaryCast = true
+reportUnnecessaryComparison = true
+reportUnnecessaryContains = true
+reportUnusedExpression = true
+reportUnnecessaryTypeIgnoreComment = true
+reportMatchNotExhaustive = true
+reportUnreachable = true
+reportImplicitOverride = true
+reportPrivateUsage = true
+reportCallInDefaultInitializer = true
+reportPropertyTypeMismatch = true

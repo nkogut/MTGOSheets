@@ -1,0 +1,14 @@
+*
+
+!pyproject.toml
+!daily_sync.bat
+!daily_sync.sh
+!.gitignore
+
+
+!/src/
+!/src/**
+
+__pycache__/
+*.egg-info/
+external_price_updater.py
