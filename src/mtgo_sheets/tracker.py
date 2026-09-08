@@ -482,10 +482,17 @@ def get_suggested_cards(
         if (age := opts.get("age")) and entry.age < age:
             continue
 
+        if (lowest_max := opts.get("lowest_max")) and entry.price_data["max_6_mo"] < lowest_max:
+            # highest price of last  6 months is below target (i.e. card hasn't been valuable enough to care about)
+            continue
+
         if (dist := opts.get("dist_from_min")) and (entry.sell_price / entry.price_data["min"]) > dist:
+            # current price is too far from lowest historical price
+            # TODO: allow user to specify time range to check in
             continue
 
         if (targets := opts.get("price_change")) and not satisfies_price_change_targets(entry, targets):
+            # price has not changed by the specified relative (pct)/absolute amount
             continue
 
         # Skip if this is not the cheapest version of the card
@@ -849,6 +856,7 @@ def update_xlsx(file: XlsxFile) -> None:
     """Update all data in the tracker spreadsheet using today's prices."""
     print(f"=== Updating {file.path} ===")
 
+    successfulUpdate = True
     logger = None
     excel_app = xw.App(visible=False)
     wishlist_handler = WishlistHandler()
@@ -860,6 +868,7 @@ def update_xlsx(file: XlsxFile) -> None:
 
     util.assert_editable(file.path)
     wb = excel_app.books.open(file.path)
+    ws = wb.sheets[0]
 
     if CONFIG.paths.external_prices.exists():
         ext_prices = json.loads(CONFIG.paths.external_prices.read_bytes())
@@ -869,7 +878,6 @@ def update_xlsx(file: XlsxFile) -> None:
     try:
         logger = Logger(file.log_path, file.log_cols, excel_app)
 
-        ws = wb.sheets[0]
         with get_db_connection() as conn:
             card_rows = parse_cards_from_sheet(conn, ws, file)
             blacklist, remaining_rows = update_blacklist(ws, card_rows, file)
@@ -892,11 +900,19 @@ def update_xlsx(file: XlsxFile) -> None:
 
     except Exception as e:
         print(f"Error occurred while updating {file.path}: {e}")
+        successfulUpdate = False
     finally:
         if logger is not None:
             logger.close()
+
+
+        if successfulUpdate:
+            wishlist_handler.flush()
+            ws.cells(1, 2).color = (255, 0, 0) # Red to indicate an update failure
+        else:
+            ws.cells(1, 2).color = None
         wb.close()
-        wishlist_handler.flush()
+
         excel_app.quit()
 
 def process_order(

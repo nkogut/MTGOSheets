@@ -3,6 +3,7 @@
 !pyproject.toml
 !daily_sync.bat
 !daily_sync.sh
+!refresh_tracker.bat
 !.gitignore
 !README.md
 
@@ -11,5 +12,6 @@
 !/src/**
 
 __pycache__/
+*.ipynb
 *.egg-info/
 external_price_updater.py

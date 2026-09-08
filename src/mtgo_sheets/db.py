@@ -45,5 +45,9 @@ def get_db_connection(db_path: Path | None = None) -> Generator[sqlite3.Connecti
     try:
         init_db(conn)
         yield conn
+        conn.commit()
+    except:
+        conn.rollback()
+        raise
     finally:
         conn.close()
