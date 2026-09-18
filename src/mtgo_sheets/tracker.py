@@ -1000,7 +1000,10 @@ def process_revise_order(entry: WatchlistEntry, qty: int, prices: list[float], o
         holdings = entry.qty
 
         net_each = float(price_each - entry.purchase_price)
-        entry.rise_thresh = old.price_each
+
+        if qty_diff > 0:
+            # Didn't fulfill the entire order - Restore preference to buy more at the previously paid price
+            entry.rise_thresh = old.price_each
 
     elif old.action == "buy":
         if qty_diff != entry.qty:
@@ -1013,7 +1016,10 @@ def process_revise_order(entry: WatchlistEntry, qty: int, prices: list[float], o
             )
         entry.qty -= qty_diff
         holdings = entry.qty
-        entry.drop_thresh = old.price_each
+
+        if qty_diff <= 0:
+            # Successfully fulfilled the entire order - Don't need to buy any more
+            entry.drop_thresh = old.price_each
 
     elif old.action == "arb":
         holdings = entry.qty
