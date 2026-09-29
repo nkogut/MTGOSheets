@@ -94,6 +94,11 @@ class Logger:
     def _load_stored_transactions(self) -> None:
         """Read stored transactions from xlsx file and update self.stored_transcations."""
         last_row = self.ws.range((self.ws.cells.last_cell.row, self.cols.index("id") + 1)).end("up").row
+        if last_row == 1:
+            # no data rows, just the header
+            self.stored_data = []
+            return
+
         rows = self.ws.range((2, 1), (last_row, len(self.cols))).value
         self.stored_data = [
             Transaction(
@@ -438,11 +443,48 @@ class WatchlistEntry:
 
 def get_suggested_cards(
     conn: sqlite3.Connection,
+    excel_app: xw.main.App,
     opts: dict[str, Any],
     suggested_last_time: list[int],
+    external_suggestions_path: Path | None = None
 ) -> list[CardRow]:
     """Apply filters from user defined opts and return all matching cards."""
     suggested_rows = []
+
+    ext_suggestion_data: dict[int, dict[str, Any]] | None = None
+    ext_suggestion_ids = None
+    if external_suggestions_path is not None:
+        # Only consider ids from an xlsx file at this path.
+        # A header is required to define each column's contents.
+        # An id column is required. All other columns are optional but must map to a column in the entry rows
+        if not external_suggestions_path.exists():
+            raise FileNotFoundError(f"External suggestions file {external_suggestions_path} does not exist")
+
+        wb = excel_app.books.open(external_suggestions_path)
+        ws = wb.sheets[0]
+        data = ws.used_range.value
+        if data:
+            header = data[0]
+            col_names = [
+                str(name).strip().lower()
+                if name is not None else ""
+                for name in header
+            ]
+
+            if "id" not in col_names:
+                raise ValueError(f"External suggestions xlsx is missing a header row or the 'id' column")
+            id_idx = header.index("id")
+
+            ext_suggestion_data = { # {id: {'col 1': val 1}} = {
+                int(row[id_idx]): {
+                    col_name: value
+                    for col_name, value in zip(header, row)
+                    if col_name and col_name != "id"
+                }
+                for row in data[1:]
+                if row[id_idx] is not None
+            }
+            ext_suggestion_ids = [str(id) for id in ext_suggestion_data.keys()]
 
     defs = build_suggestions_query(
         conn,
@@ -450,6 +492,7 @@ def get_suggested_cards(
         modern_only=opts["modern_only"],
         allow_standard=opts["allow_standard"],
         allow_foils=False,
+        ext_suggestion_ids=ext_suggestion_ids
     )
 
     ids = [d.id_ for d in defs]
@@ -495,12 +538,22 @@ def get_suggested_cards(
             # price has not changed by the specified relative (pct)/absolute amount
             continue
 
-        # Skip if this is not the cheapest version of the card
-        cheapest_id = util.get_cheapest_variant(conn, name, foil)
-        if id_ != cheapest_id:
-            continue
+        entry_dict = entry.to_dict()
 
-        suggested_rows.append(entry.to_dict())
+        if ext_suggestion_data is None:
+            # Skip if this is not the cheapest version of the card
+            # if ext suggestion data is provided, show all variants instead
+            cheapest_id = util.get_cheapest_variant(conn, name, foil)
+            if id_ != cheapest_id:
+                continue
+        else:
+            # Add additional information to the entry from the external source
+            for col_name, val in ext_suggestion_data[entry.id_].items():
+                if col_name not in entry_dict:
+                    print(f"Warning: column {col_name} from external suggestion source was not present in the original entry. It may not appear in the spreadsheet.")
+                entry_dict[col_name] = val
+
+        suggested_rows.append(entry_dict)
 
     print(f"Found {len(suggested_rows)} cards to suggest")
 
@@ -512,6 +565,7 @@ def build_suggestions_query(
     modern_only: bool = True,
     allow_standard: bool = False,
     allow_foils: bool = False,
+    ext_suggestion_ids: list[str] | None = None
 ) -> list[CardDef]:
     """Query the DB for all cards matching the criteria.
 
@@ -522,8 +576,11 @@ def build_suggestions_query(
     conditions = []
     skip_names = skip_names or set()
     skip_keywords = {"booster"}
-
     need_legalities = modern_only or not allow_standard
+
+    if ext_suggestion_ids is not None:
+        conditions.append(f"id IN ({', '.join('?' for _ in ext_suggestion_ids)})",)
+        query_params.extend(ext_suggestion_ids)
 
     if not allow_foils:
         conditions.append("foil = FALSE")
@@ -535,7 +592,6 @@ def build_suggestions_query(
     # Skip keyword within names
     conditions.extend("LOWER(name) NOT LIKE ?" for _ in skip_keywords)
     query_params.extend(f"%{keyword.lower()}%" for keyword in skip_keywords)
-
 
     if need_legalities:
         try:
@@ -622,6 +678,9 @@ def parse_cards_from_sheet(conn: sqlite3.Connection, ws: xw.Sheet, file: XlsxFil
         (file.first_data_row, 1),
         (last_row, len(file.cols)),
     ).value
+
+    if last_row < file.first_data_row:
+        return []
 
     parsed_vals: list[CardRow] = []
 
@@ -794,10 +853,11 @@ def update_blacklist(ws: xw.Sheet, card_rows: list[CardRow], file: XlsxFile) -> 
 def write_back_card_rows(ws: xw.Sheet, wb: xw.Book, output_rows: list[CardRow]) -> None:
     """Update spreadsheet with the new card rows."""
     last_row = ws.range((ws.cells.last_cell.row, file.cols.index("id"))).end("up").row
-    ws.range(
-        (file.first_data_row, 1),
-        (last_row, len(file.cols)),
-    ).clear_contents()
+    if last_row >= file.first_data_row:
+        ws.range(
+            (file.first_data_row, 1),
+            (last_row, len(file.cols)),
+        ).clear_contents()
 
     output = [[row.get(col, "") for col in file.cols] for row in output_rows ]
     ws.range((file.first_data_row, 1)).value = output
@@ -863,6 +923,7 @@ def update_xlsx(file: XlsxFile) -> None:
 
     if not file.path.exists():
         temp_book = xw.Book()
+        temp_book.sheets[0].range((file.first_data_row - 1, 1)).value = [file.cols]
         temp_book.save(file.path)
         temp_book.close()
 
@@ -887,7 +948,13 @@ def update_xlsx(file: XlsxFile) -> None:
             suggestion_opts = parse_suggestion_opts_from_sheet(ws)
             if suggestion_opts.get("enabled"):
                 suggestion_opts["skip_names"] = {row["name"] for row in output_rows}.union(blacklist)
-                suggested_rows = get_suggested_cards(conn, suggestion_opts, suggested_last_time)
+                suggested_rows = get_suggested_cards(
+                    conn,
+                    excel_app,
+                    suggestion_opts,
+                    suggested_last_time,
+                    file.external_suggestions_path
+                )
             else:
                 suggested_rows = []
 

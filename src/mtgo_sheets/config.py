@@ -91,6 +91,7 @@ class XlsxConfigDefaults(BaseModel):
     log_cols: list[str] | None = None
     wishlist_dir: Path | None = None
     sort: list[SortClause] | None = None
+    external_suggestions_path: Path | None = None
 
     # Sheet layout
     cols: list[str] | None = None
@@ -117,6 +118,7 @@ class XlsxFile(BaseModel):
     wishlist_dir: Path
     cols: list[str]
     sort: list[SortClause]
+    external_suggestions_path: Path | None = None
 
     first_data_row: int
     blacklist_row: int
@@ -134,18 +136,12 @@ class XlsxFile(BaseModel):
     def apply_defaults(cls, data: dict[str, Any]) -> dict[str, Any]:
         """Unless an option is specified for this file, apply the default that the user defined for all files."""
         defaults: XlsxConfigDefaults | None = data.pop("__defaults__", None)
-        if not defaults:
+        if defaults is None:
             return data
 
-        fields_to_check = [
-            "path", "log_path", "log_cols", "cols", "sort", "first_data_row", "wishlist_dir",
-            "blacklist_row", "blacklist_col", "suggestions_top_row", "suggestions_left_col",
-            "auto_update", "ignore_for_ext_prices",
-        ]
-
-        for field in fields_to_check:
+        for field in cls.model_fields:
             if data.get(field) is None:
-                default_val = getattr(defaults, field)
+                default_val = getattr(defaults, field, None)
                 if default_val is not None:
                     data[field] = default_val
 
@@ -154,9 +150,12 @@ class XlsxFile(BaseModel):
     @model_validator(mode="after")
     def resolve_all_paths(self) -> XlsxFile:
         """Guarantee all Paths are absolute."""
-        path_fields = ["path", "log_path", "wishlist_dir"]
+        path_fields = ["path", "log_path", "wishlist_dir", "external_suggestions_path"]
         for field in path_fields:
-            current_path: Path = getattr(self, field)
+            current_path: Path | None = getattr(self, field)
+            if current_path is None:
+                continue
+
             if current_path and not current_path.is_absolute():
                 setattr(self, field, (ROOT / current_path).resolve())
             else:
