@@ -36,6 +36,7 @@ def fetch_defs_data() -> list[CardDef]:
                 set_code=attrs["cardset"],
                 foil=bool(attrs["foil"]),
                 ver=attrs["version"] or "",
+                rarity=attrs["rarity"] or "",
             )
             for id_, attrs in all_defs.items()
         ]
@@ -44,8 +45,8 @@ def update_defs_from_zip(conn: sqlite3.Connection, defs: list[CardDef]) -> None:
     """Initialize the definitions of new card printings."""
     conn.executemany(
         """
-        INSERT INTO defs (id, name, set_, foil, ver)
-        VALUES (:id_, :name, :set_code, :foil, :ver)
+        INSERT INTO defs (id, name, set_, foil, ver, rarity)
+        VALUES (:id_, :name, :set_code, :foil, :ver, :rarity)
         ON CONFLICT(id) DO NOTHING
         """,
         [card.model_dump() for card in defs],

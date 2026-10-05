@@ -622,7 +622,7 @@ def build_suggestions_query(
         )
         query_params.extend(blacklisted_sets)
 
-    query = "SELECT id, name, set_, foil, ver FROM defs"
+    query = "SELECT id, name, set_, foil, ver, rarity FROM defs"
     if conditions:
         query += " WHERE " + "\nAND ".join(conditions)
 
@@ -634,6 +634,7 @@ def build_suggestions_query(
             set_code=row[2],
             foil=row[3],
             ver=row[4] if row[4] is not None else "",
+            rarity=row[5] if row[5] is not None else "",
         )
         for row in rows
     ]
@@ -728,7 +729,7 @@ def create_entries_from_rows(
     if ids:
         for attr in conn.execute(
             f"""
-            SELECT id, name, set_, foil, ver
+            SELECT id, name, set_, foil, ver, rarity
             FROM defs
             WHERE id IN ({', '.join('?' for _ in ids)})
             """,
@@ -740,6 +741,7 @@ def create_entries_from_rows(
                 set_code=attr[2],
                 foil=bool(attr[3]),
                 ver=attr[4] if attr[4] is not None else "",
+                rarity=attr[5] if attr[5] is not None else "",
             )
 
     for row in card_rows:

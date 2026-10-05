@@ -16,6 +16,7 @@ class CardDef(BaseModel):
     set_code: str
     foil: bool
     ver: str
+    rarity: str
 
 TX_REQUIRED_EXTRAS: dict[str, list[str]] = {
     "buy": [],

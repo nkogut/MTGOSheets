@@ -38,13 +38,13 @@ def name_to_id(conn: sqlite3.Connection, name: str, set_: str | None, foil: bool
 
 def get_def(conn: sqlite3.Connection, id_: int) -> CardDef:
     """Find and return the definition for the id's printing."""
-    row = conn.execute("SELECT id, name, set_, foil, ver FROM defs WHERE id = ?", (id_,)).fetchone()
+    row = conn.execute("SELECT id, name, set_, foil, ver, rarity FROM defs WHERE id = ?", (id_,)).fetchone()
     if row is None:
         raise ValueError(f"No def found for id {id_}")
-    id_, name, set_code, foil, ver = row
-    if ver is None:
-        ver = ""
-    return CardDef(id_=id_, name=name, set_code=set_code, foil=bool(foil), ver=ver)
+    id_, name, set_code, foil, ver, rarity = row
+    # if ver is None:
+    #     ver = ""
+    return CardDef(id_=id_, name=name, set_code=set_code, foil=bool(foil), ver=ver, rarity=rarity)
 
 def get_price_list(conn: sqlite3.Connection, id_: int) -> list[float]:
     """Return the price list associated with the id."""
@@ -88,7 +88,6 @@ def get_cheapest_variant(conn: sqlite3.Connection, name: str, foil: bool = False
 
     if row is None:
         return None
-        # raise ValueError(f"Failed to find any variants for Name={name}, Foil={foil}")
     return row[0]
 
 def get_price_lists(conn: sqlite3.Connection, ids: list[int] | None = None) -> dict[int, list[float]]:

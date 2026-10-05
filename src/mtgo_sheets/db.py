@@ -29,7 +29,8 @@ def init_db(conn: sqlite3.Connection) -> None:
         name TEXT,
         set_ TEXT,
         foil BOOLEAN,
-        ver TEXT)
+        ver TEXT,
+        rarity TEXT)
         """,
     )
 
