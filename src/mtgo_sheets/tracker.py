@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import sqlite3
 import xml.etree.ElementTree as ET  # noqa: F401 -- for reset_full_inv()
 from bisect import bisect_right
@@ -462,7 +463,7 @@ def get_suggested_cards(
 
         wb = excel_app.books.open(external_suggestions_path)
         ws = wb.sheets[0]
-        data = ws.used_range.value
+        data = ws.used_range.options(ndim=2).value # ndim=2 forces a 2D list even if there is only 1 row
         if data:
             header = data[0]
             col_names = [
@@ -971,7 +972,6 @@ def update_xlsx(file: XlsxFile) -> None:
     finally:
         if logger is not None:
             logger.close()
-
 
         if successfulUpdate:
             wishlist_handler.flush()

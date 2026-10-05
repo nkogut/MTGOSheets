@@ -4,7 +4,7 @@ import numbers
 import operator
 import tomllib
 from collections.abc import Callable
-from datetime import date
+import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -167,8 +167,8 @@ class AppConfig(BaseModel):
     """Process the config toml file. Store all configuration options."""
 
     debug_mode: bool = False
-    start_date: date
-    today: date = Field(default_factory=date.today)
+    start_date: datetime.date
+    today: datetime.date = Field(default_factory=datetime.date.today)
 
     paths: PathsConfig
     lists: ListsConfig
@@ -206,7 +206,6 @@ class AppConfig(BaseModel):
         raw_data["xlsx"] = processed_files
         return raw_data
 
-
 def compile_sort_fn(
     sort_spec: list[SortClause],
     valid_cols: list[str],
@@ -220,6 +219,9 @@ def compile_sort_fn(
                 raise ValueError(f"Invalid sort column: {clause.col!r}")
 
             val = row[clause.col]
+            if isinstance(val, (datetime.datetime, datetime.date)):
+                val = val.strftime("%Y-%m-%d")
+
             if clause.op is not None:
                 if clause.op not in OPERATOR_MAP:
                     raise ValueError(f"Unsupported sort operator: {clause.op!r}")
