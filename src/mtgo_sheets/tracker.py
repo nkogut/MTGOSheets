@@ -1,9 +1,8 @@
 import argparse
-import datetime
 import sqlite3
-import xml.etree.ElementTree as ET  # noqa: F401 -- for reset_full_inv()
 from bisect import bisect_right
 from collections import defaultdict
+from contextvars import ContextVar
 from pathlib import Path
 from statistics import stdev
 from string import capwords
@@ -20,6 +19,10 @@ from mtgo_sheets.models import CardDef, CardRow, ExtPriceMap, Transaction
 INVALID_EXT_BUY_PRICE = 0
 INVALID_EXT_SELL_PRICE = 999
 DEFAULT_VENDOR = "goat"
+
+# Context variable to hold the currently processing XlsxFile across function calls
+_CURRENT_XLSX: ContextVar[XlsxFile] = ContextVar("current_xlsx")
+
 
 class Logger:
     """Maintain transaction records. Update an xlsx files with new and revised transactions."""
@@ -452,12 +455,14 @@ def get_suggested_cards(
     """Apply filters from user defined opts and return all matching cards."""
     suggested_rows = []
 
+    allow_foils = False # default
     ext_suggestion_data: dict[int, dict[str, Any]] | None = None
     ext_suggestion_ids = None
     if external_suggestions_path is not None:
         # Only consider ids from an xlsx file at this path.
         # A header is required to define each column's contents.
         # An id column is required. All other columns are optional but must map to a column in the entry rows
+        allow_foils = True
         if not external_suggestions_path.exists():
             raise FileNotFoundError(f"External suggestions file {external_suggestions_path} does not exist")
 
@@ -492,7 +497,7 @@ def get_suggested_cards(
         skip_names=opts["skip_names"],
         modern_only=opts["modern_only"],
         allow_standard=opts["allow_standard"],
-        allow_foils=False,
+        allow_foils=allow_foils,
         ext_suggestion_ids=ext_suggestion_ids
     )
 
@@ -670,11 +675,12 @@ def satisfies_price_change_targets(entry: WatchlistEntry, targets: str) -> bool:
 
     return True
 
-def parse_cards_from_sheet(conn: sqlite3.Connection, ws: xw.Sheet, file: XlsxFile) -> list[CardRow]:
+def parse_cards_from_sheet(conn: sqlite3.Connection, ws: xw.Sheet) -> list[CardRow]:
     """Parse card data from each row of the sheet and return a CardRow for each.
 
     Try to determine ids for cards that don't have one listed.
     """
+    file = _CURRENT_XLSX.get()
     last_row = ws.range((ws.cells.last_cell.row, file.cols.index("id"))).end("up").row
     rows = ws.range(
         (file.first_data_row, 1),
@@ -766,7 +772,6 @@ def process_entries(
     logger: Logger,
     wishlist_handler: WishlistHandler,
     card_entries: list[WatchlistEntry],
-    file: XlsxFile,
 ) -> tuple[list[CardRow], list[int], dict[str, list[str]]]:
     """Execute orders for each card.
 
@@ -776,7 +781,7 @@ def process_entries(
     suggested_last_time: list[int] = []
     alerts = defaultdict(list)
     for entry in card_entries:
-        process_order(entry, file, logger, wishlist_handler)
+        process_order(entry, logger, wishlist_handler)
         if entry.active:
             output_rows.append(entry.to_dict())
             if entry.hit:
@@ -791,6 +796,7 @@ def parse_suggestion_opts_from_sheet(ws: xw.Sheet) -> dict[str, Any]:
 
     Return the selected suggestion options from the sheet.
     """
+    file = _CURRENT_XLSX.get()
     keys = CONFIG.lists.suggestion_option_keys
     num_keys = len(keys)
     opts = dict.fromkeys(keys, None)
@@ -814,11 +820,12 @@ def parse_suggestion_opts_from_sheet(ws: xw.Sheet) -> dict[str, Any]:
 
     return opts
 
-def parse_blacklist_from_sheet(file: XlsxFile, ws: xw.Sheet) -> list[str]:
+def parse_blacklist_from_sheet(ws: xw.Sheet) -> list[str]:
     """Initialize the blacklist input field if needed.
 
     Return the list of cards typed by the user in the blacklist entry cell
     """
+    file = _CURRENT_XLSX.get()
     label_cell = ws.cells(file.blacklist_row, file.blacklist_col - 1)
     blacklist_cell = ws.cells(file.blacklist_row, file.blacklist_col)
     if not label_cell.value:
@@ -832,14 +839,17 @@ def parse_blacklist_from_sheet(file: XlsxFile, ws: xw.Sheet) -> list[str]:
 
     return [card.strip() for card in blacklist.split(";")]
 
-def update_blacklist(ws: xw.Sheet, card_rows: list[CardRow], file: XlsxFile) -> tuple[list[str], list[CardRow]]:
+def update_blacklist(ws: xw.Sheet, card_rows: list[CardRow]) -> tuple[list[str], list[CardRow]]:
     """Update the saved blacklist with any new cards from the sheet.
 
     Return all blacklisted card names and all card rows that are unaffected by the blacklist.
     """
-    path = CONFIG.paths.suggestion_card_blacklist
+    file = _CURRENT_XLSX.get()
+    path = file.suggestion_card_blacklist
+    if not path:
+        return [], []
     remaining_rows = []
-    blacklist = parse_blacklist_from_sheet(file, ws)
+    blacklist = parse_blacklist_from_sheet(ws)
     for row in card_rows:
         if row["add_to_blacklist"]:
             blacklist.append(row["name"])
@@ -855,6 +865,7 @@ def update_blacklist(ws: xw.Sheet, card_rows: list[CardRow], file: XlsxFile) -> 
 
 def write_back_card_rows(ws: xw.Sheet, wb: xw.Book, output_rows: list[CardRow]) -> None:
     """Update spreadsheet with the new card rows."""
+    file = _CURRENT_XLSX.get()
     last_row = ws.range((ws.cells.last_cell.row, file.cols.index("id"))).end("up").row
     if last_row >= file.first_data_row:
         ws.range(
@@ -917,80 +928,84 @@ def dump_ids(files: list[XlsxFile]) -> Path:
 
 def update_xlsx(file: XlsxFile) -> None:
     """Update all data in the tracker spreadsheet using today's prices."""
-    print(f"=== Updating {file.path} ===")
-
-    successfulUpdate = True
-    logger = None
-    excel_app = xw.App(visible=False)
-    wishlist_handler = WishlistHandler()
-
-    if not file.path.exists():
-        temp_book = xw.Book()
-        temp_book.sheets[0].range((file.first_data_row - 1, 1)).value = [file.cols]
-        temp_book.save(file.path)
-        temp_book.close()
-
-    util.assert_editable(file.path)
-    wb = excel_app.books.open(file.path)
-    ws = wb.sheets[0]
-
-    if CONFIG.paths.external_prices.exists():
-        ext_prices = json.loads(CONFIG.paths.external_prices.read_bytes())
-    else:
-        ext_prices = None
-
+    token = _CURRENT_XLSX.set(file)
     try:
-        logger = Logger(file.log_path, file.log_cols, excel_app)
+        print(f"=== Updating {file.path} ===")
 
-        with get_db_connection() as conn:
-            card_rows = parse_cards_from_sheet(conn, ws, file)
-            blacklist, remaining_rows = update_blacklist(ws, card_rows, file)
-            card_entries, failed_rows = create_entries_from_rows(conn, remaining_rows, ext_prices)
-            output_rows, suggested_last_time, alerts = process_entries(logger, wishlist_handler, card_entries, file)
+        successfulUpdate = True
+        logger = None
+        excel_app = xw.App(visible=False)
+        wishlist_handler = WishlistHandler()
 
-            suggestion_opts = parse_suggestion_opts_from_sheet(ws)
-            if suggestion_opts.get("enabled"):
-                suggestion_opts["skip_names"] = {row["name"] for row in output_rows}.union(blacklist)
-                suggested_rows = get_suggested_cards(
-                    conn,
-                    excel_app,
-                    suggestion_opts,
-                    suggested_last_time,
-                    file.external_suggestions_path
-                )
-            else:
-                suggested_rows = []
+        if not file.path.exists():
+            temp_book = xw.Book()
+            temp_book.sheets[0].range((file.first_data_row - 1, 1)).value = [file.cols]
+            temp_book.save(file.path)
+            temp_book.close()
 
-        if file.sort_fn is not None:
-            output_rows = sorted(output_rows, key=file.sort_fn)
-        all_card_rows = output_rows + suggested_rows + failed_rows
+        util.assert_editable(file.path)
+        wb = excel_app.books.open(file.path)
+        ws = wb.sheets[0]
 
-        write_back_card_rows(ws, wb, all_card_rows)
-        display_alerts(alerts)
-
-    except Exception as e:
-        print(f"Error occurred while updating {file.path}: {e}")
-        successfulUpdate = False
-    finally:
-        if logger is not None:
-            logger.close()
-
-        if successfulUpdate:
-            wishlist_handler.flush()
-            ws.cells(1, 2).color = (255, 0, 0) # Red to indicate an update failure
+        if CONFIG.paths.external_prices.exists():
+            ext_prices = json.loads(CONFIG.paths.external_prices.read_bytes())
         else:
-            ws.cells(1, 2).color = None
-        wb.close()
+            ext_prices = None
 
-        excel_app.quit()
+        try:
+            logger = Logger(file.log_path, file.log_cols, excel_app)
+
+            with get_db_connection() as conn:
+                card_rows = parse_cards_from_sheet(conn, ws)
+                blacklist, remaining_rows = update_blacklist(ws, card_rows)
+                card_entries, failed_rows = create_entries_from_rows(conn, remaining_rows, ext_prices)
+                output_rows, suggested_last_time, alerts = process_entries(logger, wishlist_handler, card_entries)
+
+                suggestion_opts = parse_suggestion_opts_from_sheet(ws)
+                if suggestion_opts.get("enabled"):
+                    suggestion_opts["skip_names"] = {row["name"] for row in output_rows}.union(blacklist)
+                    suggested_rows = get_suggested_cards(
+                        conn,
+                        excel_app,
+                        suggestion_opts,
+                        suggested_last_time,
+                        file.external_suggestions_path
+                    )
+                else:
+                    suggested_rows = []
+
+            if file.sort_fn is not None:
+                output_rows = sorted(output_rows, key=file.sort_fn)
+            all_card_rows = output_rows + suggested_rows + failed_rows
+
+            write_back_card_rows(ws, wb, all_card_rows)
+            display_alerts(alerts)
+
+        except Exception as e:
+            print(f"Error occurred while updating {file.path}: {e}")
+            successfulUpdate = False
+        finally:
+            if logger is not None:
+                logger.close()
+
+            if successfulUpdate:
+                wishlist_handler.flush()
+                ws.cells(1, 2).color = (255, 0, 0) # Red to indicate an update failure
+            else:
+                ws.cells(1, 2).color = None
+            wb.close()
+
+            excel_app.quit()
+    finally:
+        _CURRENT_XLSX.reset(token)
 
 def process_order(
         entry: WatchlistEntry,
-        file: XlsxFile,
         logger: Logger,
         wishlist_handler: WishlistHandler,
     ) -> None:
     """Update the entry, spreadsheet, log, and wishlist based on the result of the order command."""
+    file = _CURRENT_XLSX.get()
     if not (order_cmd := entry.pending_order):
         return
 
