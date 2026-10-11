@@ -15,7 +15,8 @@ class CardDef(BaseModel):
     name: str
     set_code: str
     foil: bool
-    ver: str
+    base_printing: bool
+    variant_data: dict[str, Any]
     rarity: str
 
 TX_REQUIRED_EXTRAS: dict[str, list[str]] = {

@@ -1,9 +1,12 @@
+import gzip
 import sqlite3
 import tempfile
+
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 from zipfile import ZipFile
 
 import orjson as json
@@ -13,43 +16,169 @@ from mtgo_sheets.config import CONFIG, XlsxFile
 from mtgo_sheets.db import get_db_connection
 from mtgo_sheets.models import CardDef
 from mtgo_sheets.tracker import dump_ids
+from mtgo_sheets.util import clean_collector_no
+
+SCRYFALL_HEADERS = {
+    "User-Agent": "MTGSetLegalityApp/1.0",
+    "Accept": "*/*",
+}
 
 
-def fetch_defs_data() -> list[CardDef]:
-    """Download and parse card definitions. Return a CardDef for every ID available."""
-    url = "https://www.goatbots.com/download/prices/card-definitions.zip"
-    res = requests.get(url)
-    res.raise_for_status()
+def extract_variant_data(card: dict[str, Any] | None, is_foil: bool) -> dict[str, str]:
+    """Parse a Scryfall card entry to determine printing details."""
+    if not card:
+        return {
+            "collector_num": "",
+            "treatment": "normal",
+            "frame": "regular",
+            "finish": "normal",
+        }
+
+    TREATMENTS = ("showcase", "extendedart", "bundle")
+    RETRO_FRAMES = {"1993", "1997"}
+
+    effects = set(card.get("frame_effects") or []) | set(card.get("promo_types") or [])
+    finishes = set(card.get("finishes") or [])
+
+    treatment = next(
+        (t for t in TREATMENTS if t in effects),
+        "borderless" if card.get("border_color") == "borderless" else "normal",
+    )
+
+    is_retro = card.get("frame") in RETRO_FRAMES or "retro" in effects
+    is_etched = is_foil and ("etched" in finishes or "etched" in effects)
+
+    return {
+        "collector_num": clean_collector_no(str(card.get("collector_number") or "")),
+        "treatment": treatment,
+        "frame": "retro" if is_retro else "regular",
+        "finish": "etched" if is_etched else "normal",
+    }
+
+
+def collector_sort_key(card_def: CardDef) -> int:
+    """Gets the integer value of a collector number to enable sorting them"""
+    raw = card_def.variant_data.get("collector_num", "")
+    digits = "".join(filter(str.isdigit, str(raw)))
+    return int(digits) if digits else 9999999
+
+def fetch_defs_data(conn: sqlite3.Connection) -> list[CardDef]:
+    """Download and parse card definitions. Return a CardDef for every new ID available."""
+
+    # Get limited info for each card in goatbots' dataset
+    re_defs = requests.get("https://www.goatbots.com/download/prices/card-definitions.zip")
+    re_defs.raise_for_status()
 
     with tempfile.TemporaryDirectory() as temp_dir:
         zip_dir = Path(temp_dir)
-        with ZipFile(BytesIO(res.content)) as zip_file:
+        with ZipFile(BytesIO(re_defs.content)) as zip_file:
             zip_file.extractall(zip_dir)
 
         defs_path = zip_dir / "card-definitions.txt"
         all_defs = json.loads(defs_path.read_bytes())
 
-        return [
+    # Only process mtgo_ids that do not already exist in the database
+    existing_ids = {row[0] for row in conn.execute("SELECT id FROM defs").fetchall()}
+    new_defs = {int(k): v for k, v in all_defs.items() if int(k) not in existing_ids}
+    if not new_defs:
+        return []
+
+    # Get frame/printing/treatment details from Scryfall for the new defs
+    # Get the most recent download from the catalogue
+    re_catalogue = requests.get("https://api.scryfall.com/bulk-data", headers=SCRYFALL_HEADERS)
+    re_catalogue.raise_for_status()
+    default_cards_url = next(d["jsonl_download_uri"] for d in re_catalogue.json()["data"] if d["type"] == "default_cards")
+    re_printings = requests.get(default_cards_url, stream=True)
+    re_printings.raise_for_status()
+
+    scryfall_by_id = {}
+    scryfall_by_name_set = defaultdict(list)
+
+    # Gather relevant mtgo_ids
+    with gzip.GzipFile(fileobj=re_printings.raw) as f:
+        for line in f:
+            card = json.loads(line)
+            if (mtgo_id := card.get("mtgo_id")) is not None:
+                scryfall_by_id[mtgo_id] = card
+            if (foil_id := card.get("mtgo_foil_id")) is not None:
+                scryfall_by_id[foil_id] = card
+
+            name = card.get("name", "").lower().strip()
+            set_ = card.get("set", "").lower().strip()
+            scryfall_by_name_set[(name, set_)].append(card)
+
+    card_defs_list = []
+
+    # Map Scryfall data to the new defs
+    for id_, attrs in new_defs.items():
+        card = scryfall_by_id.get(id_)
+        is_foil = bool(attrs["foil"])
+
+        # Scryfall does not have mtgo_foil_id for all new cards.
+        # Try to infer id based on the non-foil version if needed
+        if not card and is_foil:
+            name = attrs["name"].lower().strip()
+            set_ = attrs["cardset"].lower().strip()
+            collector_no = clean_collector_no(attrs["version"] or "")
+            matches = scryfall_by_name_set.get((name, set_), [])
+
+            if collector_no:
+                for match in matches:
+                    if clean_collector_no(str(match.get("collector_number", ""))) == collector_no:
+                        card = match
+                        break
+            if not card and matches:
+                card = matches[0]
+
+        variant_data = extract_variant_data(card, is_foil=is_foil)
+        if not variant_data["collector_num"]:
+            variant_data["collector_num"] = clean_collector_no(str(attrs["version"] or ""))
+
+        card_defs_list.append(
             CardDef(
-                id_=int(id_),
+                id_=id_,
                 name=attrs["name"],
                 set_code=attrs["cardset"],
-                foil=bool(attrs["foil"]),
-                ver=attrs["version"] or "",
+                foil=is_foil,
+                base_printing=False,
+                variant_data=variant_data,
                 rarity=attrs["rarity"] or "",
             )
-            for id_, attrs in all_defs.items()
+        )
+
+    # Determine which card is the base printing
+    groups = defaultdict(list)
+    for def_ in card_defs_list:
+        groups[(def_.name, def_.set_code, def_.foil)].append(def_)
+
+    for group in groups.values():
+        normals = [
+            c for c in group
+            if c.variant_data.get("treatment") == "normal"
+            and c.variant_data.get("frame") == "regular"
         ]
+        candidates = normals if normals else group
+        candidates.sort(key=collector_sort_key)
+
+        candidates[0].base_printing = True
+
+    return card_defs_list
 
 def update_defs_from_zip(conn: sqlite3.Connection, defs: list[CardDef]) -> None:
     """Initialize the definitions of new card printings."""
     conn.executemany(
         """
-        INSERT INTO defs (id, name, set_, foil, ver, rarity)
-        VALUES (:id_, :name, :set_code, :foil, :ver, :rarity)
+        INSERT INTO defs (id, name, set_, foil, base_printing, variant_data, rarity)
+        VALUES (:id_, :name, :set_code, :foil, :base_printing, :variant_data_json, :rarity)
         ON CONFLICT(id) DO NOTHING
         """,
-        [card.model_dump() for card in defs],
+        [
+            {
+                **card.model_dump(),
+                "variant_data_json": json.dumps(card.variant_data).decode("utf-8")
+            }
+            for card in defs
+        ],
     )
 
 def update_legal_sets() -> None:
@@ -63,12 +192,9 @@ def update_legal_sets() -> None:
 
 def get_modern_sets() -> list[str]:
     """Return all modern legal set codes."""
-    headers = {
-        "User-Agent": "MTGSetLegalityApp/1.0",
-        "Accept": "*/*",
-    }
+
     modern_legality_req = "https://api.scryfall.com/sets"
-    res = requests.get(modern_legality_req, headers=headers)
+    res = requests.get(modern_legality_req, headers=SCRYFALL_HEADERS)
     res.raise_for_status()
     modern_data = res.json()["data"]
 
@@ -156,9 +282,10 @@ def update_prices(year: int | None = None) -> None:
     if price_list is not None:
         days_recorded = len(json.loads(price_list[0]))
     else:
-        defs_to_insert = fetch_defs_data()
         with get_db_connection() as conn:
-            update_defs_from_zip(conn, defs_to_insert)
+            defs_to_insert = fetch_defs_data(conn)
+            if defs_to_insert:
+                update_defs_from_zip(conn, defs_to_insert)
 
         days_recorded = 0
 

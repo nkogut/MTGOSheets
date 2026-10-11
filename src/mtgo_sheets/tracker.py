@@ -508,9 +508,6 @@ def get_suggested_cards(
         if (id_ := def_entry.id_) not in prices_map:
             continue
 
-        name = def_entry.name
-        foil = def_entry.foil
-
         entry = WatchlistEntry(
             vals={
                 "id": id_,
@@ -547,10 +544,9 @@ def get_suggested_cards(
         entry_dict = entry.to_dict()
 
         if ext_suggestion_data is None:
-            # Skip if this is not the cheapest version of the card
+            # Only consider the base printing
             # if ext suggestion data is provided, show all variants instead
-            cheapest_id = util.get_cheapest_variant(conn, name, foil)
-            if id_ != cheapest_id:
+            if not def_entry.base_printing:
                 continue
         else:
             # Add additional information to the entry from the external source
@@ -627,7 +623,7 @@ def build_suggestions_query(
         )
         query_params.extend(blacklisted_sets)
 
-    query = "SELECT id, name, set_, foil, ver, rarity FROM defs"
+    query = "SELECT id, name, set_, foil, base_printing, variant_data, rarity FROM defs"
     if conditions:
         query += " WHERE " + "\nAND ".join(conditions)
 
@@ -637,9 +633,10 @@ def build_suggestions_query(
             id_=row[0],
             name=row[1],
             set_code=row[2],
-            foil=row[3],
-            ver=row[4] if row[4] is not None else "",
-            rarity=row[5] if row[5] is not None else "",
+            foil=bool(row[3]),
+            base_printing=bool(row[4]),
+            variant_data=json.loads(row[5]),
+            rarity=row[6] if row[6] is not None else "",
         )
         for row in rows
     ]
@@ -735,7 +732,7 @@ def create_entries_from_rows(
     if ids:
         for attr in conn.execute(
             f"""
-            SELECT id, name, set_, foil, ver, rarity
+            SELECT id, name, set_, foil, base_printing, variant_data, rarity
             FROM defs
             WHERE id IN ({', '.join('?' for _ in ids)})
             """,
@@ -746,8 +743,9 @@ def create_entries_from_rows(
                 name=attr[1],
                 set_code=attr[2],
                 foil=bool(attr[3]),
-                ver=attr[4] if attr[4] is not None else "",
-                rarity=attr[5] if attr[5] is not None else "",
+                base_printing=bool(attr[4]),
+                variant_data=json.loads(attr[5]),
+                rarity=attr[6] if attr[6] is not None else "",
             )
 
     for row in card_rows:
@@ -847,7 +845,7 @@ def update_blacklist(ws: xw.Sheet, card_rows: list[CardRow]) -> tuple[list[str],
     file = _CURRENT_XLSX.get()
     path = file.suggestion_card_blacklist
     if not path:
-        return [], []
+        return [], card_rows
     remaining_rows = []
     blacklist = parse_blacklist_from_sheet(ws)
     for row in card_rows:
