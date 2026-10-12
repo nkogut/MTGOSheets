@@ -327,22 +327,25 @@ class WatchlistEntry:
         """
         id_str = str(self.id_)
         if ext_prices and any(id_str in vendor_prices for vendor_prices in ext_prices.values()):
-             # sell_price is what the vendor sells the card for. This is the vendor you should buy_from
+            # Only consider vendors that have stock
+            active_vendors = [v for v, p in ext_prices.items() if id_str in p]
+
+            # sell_price is what the vendor sells the card for. This is the vendor you should buy_from
             sell_to = max(
-                ext_prices,
-                key=lambda vendor: ext_prices[vendor].get(id_str, {}).get("buy", INVALID_EXT_BUY_PRICE),
+                active_vendors,
+                key=lambda vendor: ext_prices[vendor][id_str].get("buy", INVALID_EXT_BUY_PRICE),
             )
 
             buy_from = min(
-                ext_prices,
-                key=lambda vendor: ext_prices[vendor].get(id_str, {}).get("sell", INVALID_EXT_SELL_PRICE),
+                active_vendors,
+                key=lambda vendor: ext_prices[vendor][id_str].get("sell", INVALID_EXT_SELL_PRICE),
             )
 
-            buy_price = ext_prices[sell_to][id_str]["buy"]
+            buy_price = ext_prices[sell_to][id_str].get("buy", INVALID_EXT_BUY_PRICE)
             if buy_price <= INVALID_EXT_BUY_PRICE:
                 sell_to = DEFAULT_VENDOR
 
-            sell_price = ext_prices[buy_from][id_str]["sell"]
+            sell_price = ext_prices[buy_from][id_str].get("sell", INVALID_EXT_SELL_PRICE)
             if sell_price >= INVALID_EXT_SELL_PRICE:
                 sell_price = self.price_hist[-1]
                 buy_from = DEFAULT_VENDOR
@@ -368,6 +371,7 @@ class WatchlistEntry:
         self.rise_thresh = vals.get("rise")
         self.drop_thresh = float(self.drop_thresh) if self.drop_thresh is not None else None
         self.rise_thresh = float(self.rise_thresh) if self.rise_thresh is not None else None
+
         # Activate a suggestion if triggers are provided for it
         if self.drop_thresh or self.rise_thresh:
             self.active = True
@@ -1141,8 +1145,41 @@ def display_alerts(alerts: dict[str, list[str]]) -> None:
                 print(f"- {msg}")
         print("=" * 24)
 
+def print_file_names() -> None:
+    """Prints all available xlsx files in config.toml."""
+    print("Available files:")
+    for key in CONFIG.xlsx.keys():
+        print(f"  - {key}")
+
+def print_file_params(file_name) -> None:
+    """Prints all settings in config.toml for a given file."""
+    if (file := CONFIG.xlsx.get(file_name)) is None:
+        print(f"Error: '{file_name}' not found in config.toml.\n")
+        print_file_names()
+        return
+
+    print(f"Parameters for '{file_name}':")
+    for key, value in vars(file).items():
+        print(f"  {key}: {value}")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "-f", "--file",
+        help="Update only the specified file name (from config.toml)",
+    )
+
+    parser.add_argument(
+        "-i", "--info",
+        help="Print all settings for a specified file name",
+    )
+
+    parser.add_argument(
+        "-l", "--list",
+        action="store_true",
+        help="List all available xlsx files",
+    )
 
     parser.add_argument(
         "--dump",
@@ -1159,11 +1196,24 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.dump:
-        files = [file for file in CONFIG.xlsx.values()  if not file.ignore_for_ext_prices]
+        files = [file for file in CONFIG.xlsx.values() if not file.ignore_for_ext_prices]
         dump_ids(files)
 
     elif args.debug:
         update_xlsx(CONFIG.xlsx["debug"])
+
+    elif args.file:
+        if args.file in CONFIG.xlsx:
+            update_xlsx(CONFIG.xlsx[args.file])
+        else:
+            print(f"Error: '{args.file}' not found in config.toml")
+            print_file_names()
+
+    elif args.list:
+        print_file_names()
+
+    elif args.info:
+        print_file_params(args.info)
 
     else:
         # Update all sheets
