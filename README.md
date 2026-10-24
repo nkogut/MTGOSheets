@@ -4,6 +4,8 @@ An automated Magic: The Gathering Online inventory manager and market tracker wi
 
 ## Features
 
+![Example Sheet](samples/sheet_screenshot.png)
+
 ### Spreadsheet-Driven Tracking
 
 * All day-to-day controls are directly in the sheet

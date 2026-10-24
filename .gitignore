@@ -10,9 +10,11 @@
 
 !/src/
 !/tests
+!/samples
 
 !/src/**
 !/tests/**
+!/samples/**
 
 __pycache__/
 *.ipynb
