@@ -54,7 +54,7 @@ class Logger:
         if tx.net_each is not None:
             tx.net_total = tx.net_each * tx.qty
 
-        if tx.action == "revision":
+        if tx.action == "revise":
             self._revise_transaction(tx)
         else:
             self.transactions.append(tx)
@@ -269,7 +269,7 @@ class WatchlistEntry:
         remaining_qty = int(self.qty - sell_qty)
         self.qty = remaining_qty
 
-        if self.rise_thresh is not None and (remaining_qty <= 0 or price >= self.rise_thresh):
+        if remaining_qty <= 0:
             self.rise_thresh = None
         self.hit = ""
         self.alert_msg = ""
@@ -344,9 +344,10 @@ class WatchlistEntry:
             buy_price = ext_prices[sell_to][id_str].get("buy", INVALID_EXT_BUY_PRICE)
             if buy_price <= INVALID_EXT_BUY_PRICE:
                 sell_to = DEFAULT_VENDOR
+                buy_price = 0
 
             sell_price = ext_prices[buy_from][id_str].get("sell", INVALID_EXT_SELL_PRICE)
-            if sell_price >= INVALID_EXT_SELL_PRICE:
+            if sell_price >= INVALID_EXT_SELL_PRICE or self.price_hist[-1] < sell_price:
                 sell_price = self.price_hist[-1]
                 buy_from = DEFAULT_VENDOR
 
@@ -369,8 +370,8 @@ class WatchlistEntry:
         # Alerts
         self.drop_thresh = vals.get("drop")
         self.rise_thresh = vals.get("rise")
-        self.drop_thresh = float(self.drop_thresh) if self.drop_thresh is not None else None
-        self.rise_thresh = float(self.rise_thresh) if self.rise_thresh is not None else None
+        self.drop_thresh = round(float(self.drop_thresh), 3) if self.drop_thresh is not None else None
+        self.rise_thresh = round(float(self.rise_thresh), 3) if self.rise_thresh is not None else None
 
         # Activate a suggestion if triggers are provided for it
         if self.drop_thresh or self.rise_thresh:
@@ -421,14 +422,14 @@ class WatchlistEntry:
         stats["max_6_mo"]       = max(prices_6_mo)
 
         # Note: Goatbot actually displays 8d / 1m+1d deltas on their graphs
-        if self.age > 7 + skipped_days:
+        if self.age >= 7 + skipped_days:
             stats["7d_delta"] = today_price - prices[-7]
             stats["7d_volatility"] = self._calculate_volatility(prices[-7:])
         else:
             stats["7d_delta"] = "N/A"
             stats["7d_volatility"] = "N/A"
 
-        if self.age > 30 + skipped_days:
+        if self.age >= 30 + skipped_days:
             stats["30d_delta"] = today_price - prices[-30]
             stats["30d_volatility"] = self._calculate_volatility(prices[-30:])
         else:
@@ -454,7 +455,8 @@ def get_suggested_cards(
     excel_app: xw.main.App,
     opts: dict[str, Any],
     suggested_last_time: list[int],
-    external_suggestions_path: Path | None = None
+    external_suggestions_path: Path | None = None,
+    ext_prices: ExtPriceMap | None = None,
 ) -> list[CardRow]:
     """Apply filters from user defined opts and return all matching cards."""
     suggested_rows = []
@@ -520,7 +522,7 @@ def get_suggested_cards(
             },
             card_def=def_entry,
             price_hist=prices_map[id_],
-            ext_prices=None,
+            ext_prices=ext_prices,
         )
 
         # Range allowed for the current price. Given with min/max in either order as '[price1];[price2]'
@@ -908,11 +910,12 @@ def dump_ids(files: list[XlsxFile]) -> Path:
 
             for row in rows:
                 id_ = row[file.cols.index("id")]
+                qty = row[file.cols.index("qty")]
                 rise = row[file.cols.index("rise")]
                 drop = row[file.cols.index("drop")]
 
                 # Skip cards that are only suggestions
-                if id_ is None or not (rise or drop):
+                if id_ is None or (qty <= 0 and not (rise or drop)):
                     continue
 
                 wishlist_handler.add_to_wishlist(file.wishlist_dir, int(id_), "dump")
@@ -971,7 +974,8 @@ def update_xlsx(file: XlsxFile) -> None:
                         excel_app,
                         suggestion_opts,
                         suggested_last_time,
-                        file.external_suggestions_path
+                        file.external_suggestions_path,
+                        ext_prices=ext_prices,
                     )
                 else:
                     suggested_rows = []
@@ -992,9 +996,9 @@ def update_xlsx(file: XlsxFile) -> None:
 
             if successfulUpdate:
                 wishlist_handler.flush()
-                ws.cells(1, 2).color = (255, 0, 0) # Red to indicate an update failure
-            else:
                 ws.cells(1, 2).color = None
+            else:
+                ws.cells(1, 2).color = (255, 0, 0) # Red to indicate an update failure
             wb.close()
 
             excel_app.quit()
@@ -1121,7 +1125,7 @@ def process_revise_order(entry: WatchlistEntry, qty: int, prices: list[float], o
         raise ValueError(f"Unknown action {old.action}")
 
     revised_fields = {
-        "action": "revision",
+        "action": "revise",
         "old_action": old.action,
         "old_cmd": old_cmd,
         "price_each": price_each,

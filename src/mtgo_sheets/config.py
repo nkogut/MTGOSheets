@@ -4,6 +4,7 @@ import datetime
 from decimal import Decimal
 import numbers
 import operator
+import os
 from pathlib import Path
 from typing import Any, Callable
 import tomllib
@@ -14,8 +15,6 @@ from mtgo_sheets.models import CardRow
 
 ROOT = Path(__file__).resolve().parents[2]
 TOML_PATH = ROOT / "config.toml"
-
-RAW_TOML = tomllib.loads(TOML_PATH.read_text())
 
 OPERATOR_MAP = {
     "==": operator.eq,
@@ -239,4 +238,9 @@ def compile_sort_fn(
         return tuple(result)
     return sort_fn
 
-CONFIG = AppConfig(**RAW_TOML)
+def load_config(path: Path | None = None) -> AppConfig:
+    target = path or TOML_PATH
+    toml_data = tomllib.loads(target.read_text(encoding="utf-8"))
+    return AppConfig(**toml_data)
+
+CONFIG = load_config()

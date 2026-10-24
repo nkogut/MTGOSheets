@@ -1,0 +1,33 @@
+debug_mode = true
+start_date = 2025-01-10
+today = 2026-01-10
+min_arb_thresh = 0.03
+skip_first_n_days = 0
+
+[paths]
+set_legalities = "legalities.json"
+suggestion_card_blacklist = "blacklist.json"
+external_prices = "ext_prices.json"
+external_prices_hist = "ext_prices_hist.json"
+db = "test.db"
+
+[lists]
+suggestion_option_keys = ["enabled", "modern_only", "allow_standard", "price", "age", "lowest_max", "dist_from_min", "price_change"]
+suggestion_set_blacklist = ["prm"]
+
+[xlsx_defaults]
+log_path = "log.xlsx"
+log_cols = ["date", "action", "id", "name", "price_each", "price_total", "net_each", "net_total", "qty", "vendor", "holdings", "notes"]
+wishlist_dir = "wishlists"
+cols = ["id", "name", "set", "foil", "qty", "purchase_price", "sell_price", "buy_price", "buy_from", "sell_to", "hit", "drop", "rise", "order", "add_to_blacklist", "notes", "tag", "date_created"]
+sort = ["name"]
+first_data_row = 3
+blacklist_row = 1
+blacklist_col = 5
+suggestions_top_row = 2
+suggestions_left_col = 8
+auto_update = true
+ignore_for_ext_prices = false
+
+[xlsx.main]
+path = "sheet.xlsx"

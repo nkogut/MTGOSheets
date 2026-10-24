@@ -9,7 +9,10 @@
 
 
 !/src/
+!/tests
+
 !/src/**
+!/tests/**
 
 __pycache__/
 *.ipynb
