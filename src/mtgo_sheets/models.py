@@ -27,7 +27,7 @@ TX_REQUIRED_EXTRAS: dict[str, list[str]] = {
 }
 
 class Transaction(BaseModel):
-    """Representation of one order entered on the sheet. Used to update Logger state."""
+    """Representation of one order entered on the sheet. Used to update TransactionLogger state."""
 
     action: str
     id_: int

@@ -1,6 +1,5 @@
 debug_mode = true
 start_date = 2025-01-10
-today = 2026-01-10
 min_arb_thresh = 0.03
 skip_first_n_days = 0
 

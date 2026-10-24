@@ -1,0 +1,35 @@
+start_date = 2025-01-10
+
+[paths]
+set_legalities = "sets.json"
+suggestion_card_blacklist = "global_bl.json"
+external_prices = "ext.json"
+external_prices_hist = "ext_hist.json"
+db = "cards.db"
+
+[lists]
+
+[xlsx_defaults]
+log_path = "default_log.xlsx"
+log_cols = ["id", "action"]
+wishlist_dir = "default_wl"
+cols = ["id", "name", "qty"]
+sort = [["qty", true], "name"]
+first_data_row = 4
+blacklist_row = 1
+blacklist_col = 2
+suggestions_top_row = 2
+suggestions_left_col = 5
+auto_update = true
+ignore_for_ext_prices = false
+
+[xlsx.default_sheet]
+path = "default.xlsx"
+
+[xlsx.custom_sheet]
+path = "custom.xlsx"
+suggestion_card_blacklist = "none"
+external_suggestions_path = "ext_sugg.xlsx"
+first_data_row = 6
+auto_update = false
+ignore_for_ext_prices = true

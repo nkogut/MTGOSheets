@@ -24,7 +24,7 @@ DEFAULT_VENDOR = "goat"
 _CURRENT_XLSX: ContextVar[XlsxFile] = ContextVar("current_xlsx")
 
 
-class Logger:
+class TransactionLogger:
     """Maintain transaction records. Update an xlsx files with new and revised transactions."""
 
     def __init__(self, path: Path, cols: list[str], excel_app: xw.main.App) -> None:
@@ -32,7 +32,7 @@ class Logger:
         self.path = path
         self.cols = cols
         if not self.path.exists():
-            self.wb = xw.Book()
+            self.wb = excel_app.books.add()
             self.ws = self.wb.sheets[0]
             self.ws.range((1, 1)).value = self.cols
             self.wb.save(path)
@@ -773,7 +773,7 @@ def create_entries_from_rows(
     return entries, failed_rows
 
 def process_entries(
-    logger: Logger,
+    logger: TransactionLogger,
     wishlist_handler: WishlistHandler,
     card_entries: list[WatchlistEntry],
 ) -> tuple[list[CardRow], list[int], dict[str, list[str]]]:
@@ -958,7 +958,7 @@ def update_xlsx(file: XlsxFile) -> None:
             ext_prices = None
 
         try:
-            logger = Logger(file.log_path, file.log_cols, excel_app)
+            logger = TransactionLogger(file.log_path, file.log_cols, excel_app)
 
             with get_db_connection() as conn:
                 card_rows = parse_cards_from_sheet(conn, ws)
@@ -1007,7 +1007,7 @@ def update_xlsx(file: XlsxFile) -> None:
 
 def process_order(
         entry: WatchlistEntry,
-        logger: Logger,
+        logger: TransactionLogger,
         wishlist_handler: WishlistHandler,
     ) -> None:
     """Update the entry, spreadsheet, log, and wishlist based on the result of the order command."""
