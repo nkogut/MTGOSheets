@@ -223,7 +223,7 @@ def get_standard_sets() -> list[str]:
         s["code"].lower() for s in standard_data if
         s["code"] is not None and (
         s["exitDate"]["exact"] is None or
-        datetime.strptime(standard_data[0]["exitDate"]["exact"], '%Y-%m-%dT%H:%M:%S.%f').date() > CONFIG.today)
+        datetime.strptime(s["exitDate"]["exact"], '%Y-%m-%dT%H:%M:%S.%f').date() > CONFIG.today)
     ]
 
 def get_price_history_url(year: int | None) -> str:
