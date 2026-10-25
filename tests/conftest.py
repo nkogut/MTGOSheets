@@ -1,12 +1,14 @@
 from __future__ import annotations
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any
 
 import pytest
+import sqlite3
 
-from mtgo_sheets import config, tracker
+from mtgo_sheets import config, db, tracker
 from mtgo_sheets.models import CardDef
+from tests.helpers import make_card_def
 from tests.xlsx_fakes import FakeApp
 
 # Override CONFIG in each module
@@ -16,7 +18,7 @@ tracker.CONFIG = mock_cfg
 
 
 @pytest.fixture
-def fake_app() -> FakeApp:
+def fake_app() -> Any:
     return FakeApp()
 
 @pytest.fixture
@@ -40,13 +42,14 @@ def xlsx_cfg(tmp_path: Path) -> Generator[config.XlsxFile]:
 
 @pytest.fixture
 def sample_card_def() -> CardDef:
-    """Baseline card definition for unit tests."""
-    return CardDef(
-        id_=123,
-        name="lightning bolt",
-        set_code="lea",
-        foil=False,
-        base_printing=True,
-        variant_data={"collector_num": "1", "treatment": "normal", "frame": "regular", "finish": "normal"},
-        rarity="common",
-    )
+    """Default CardDef instance for single-card unit tests."""
+    return make_card_def()
+
+
+@pytest.fixture
+def db_conn() -> Generator[sqlite3.Connection]:
+    conn = sqlite3.connect(":memory:", autocommit=False)
+    conn.create_function("REGEXP", 2, db.regexp)
+    db.init_db(conn)
+    yield conn
+    conn.close()

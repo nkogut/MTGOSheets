@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from mtgo_sheets import config
+from mtgo_sheets.config import CONFIG
 from mtgo_sheets.models import Transaction
 from mtgo_sheets.tracker import TransactionLogger
 from tests.xlsx_fakes import FakeApp, FakeBook
@@ -135,7 +135,7 @@ def test_logger_revises_existing_transaction(tmp_path: Path, fake_app: FakeApp) 
     assert ws.cells(3, 5).value == 0.003
     assert ws.cells(3, 6).value == pytest.approx(0.006)
     assert ws.cells(3, 9).value == 2
-    assert ws.cells(3, 12).value == f"old note - Revised {config.CONFIG.today} - original cmd: b4;0.004"
+    assert ws.cells(3, 12).value == f"old note - Revised {CONFIG.today} - original cmd: b4;0.004"
 
     # No other entries are revised
     assert ws.cells(4, 3).value == 456

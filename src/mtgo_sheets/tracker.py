@@ -600,6 +600,7 @@ def build_suggestions_query(
     # Skip keyword within names
     conditions.extend("LOWER(name) NOT LIKE ?" for _ in skip_keywords)
     query_params.extend(f"%{keyword.lower()}%" for keyword in skip_keywords)
+    blacklisted_sets: list[str] = CONFIG.lists.suggestion_set_blacklist.copy()
 
     if need_legalities:
         try:
@@ -616,17 +617,14 @@ def build_suggestions_query(
             conditions.append(f"LOWER(set_) IN ({', '.join('?' for _ in modern_sets)})")
             query_params.extend(modern_sets)
 
-        blacklisted_sets: list[str] = CONFIG.lists.suggestion_set_blacklist
-
         if not allow_standard:
             standard_sets = set_legalities.get("standard", [])
             if not standard_sets:
                 print("Warning: failed to update standard legal sets")
             blacklisted_sets.extend(standard_sets)
 
-        conditions.append(
-            f"LOWER(set_) NOT IN ({', '.join('?' for _ in blacklisted_sets)})",
-        )
+    if blacklisted_sets:
+        conditions.append(f"LOWER(set_) NOT IN ({', '.join('?' for _ in blacklisted_sets)})")
         query_params.extend(blacklisted_sets)
 
     query = "SELECT id, name, set_, foil, base_printing, variant_data, rarity FROM defs"

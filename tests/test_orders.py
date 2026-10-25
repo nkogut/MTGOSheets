@@ -15,7 +15,7 @@ from statistics import stdev
 import orjson as json
 import pytest
 
-from mtgo_sheets import config as cfg_mod
+from mtgo_sheets.config import CONFIG
 from mtgo_sheets.models import CardDef, Transaction
 from mtgo_sheets.tracker import (
     DEFAULT_VENDOR,
@@ -39,7 +39,7 @@ def test_vendor_price_and_stats_selection(
         "ext_vendor_2": {"123": {"buy": 0.002, "sell": 0.005}},
     }
     ext_file.write_bytes(json.dumps(ext_data))
-    monkeypatch.setattr(cfg_mod.CONFIG.paths, "external_prices", ext_file)
+    monkeypatch.setattr(CONFIG.paths, "external_prices", ext_file)
 
     # Leading 0s should not be included in statistics
     prices = [0.0, 0.002, 0.002, 0.003, 0.003, 0.004, 0.004, 0.005, 0.006, 0.006, 0.007]
@@ -80,7 +80,7 @@ def test_fallback_to_non_external_vendors(sample_card_def: CardDef) -> None:
 
 def test_skip_first_n_days(sample_card_def: CardDef, monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify that skip_first_n_days is applied to all stats"""
-    monkeypatch.setattr(cfg_mod.CONFIG, "skip_first_n_days", 3)
+    monkeypatch.setattr(CONFIG, "skip_first_n_days", 3)
 
     prices = [0.10, 0.09, 0.08, 0.003, 0.004, 0.005, 0.006, 0.007]
     entry = WatchlistEntry(
