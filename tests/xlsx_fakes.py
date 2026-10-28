@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from pathlib import Path
 from typing import Any
 
@@ -96,9 +98,12 @@ class FakeSheet:
 
 
 class FakeBook:
-    """Mimics xw.Book. Touches actual workbook path on save()."""
+    """Mimics xw.Book. Touches actual workbook path on creation and save."""
     def __init__(self, path: Path | None = None) -> None:
         self.path = path
+        if self.path:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.touch()
         self.sheets = [FakeSheet()]
         self.saved = False
         self.closed = False
@@ -109,6 +114,8 @@ class FakeBook:
             self.path = Path(target)
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self.path.write_bytes(b"fake-xlsx-content")
+            mtime = self.path.stat().st_mtime + 1.0 if self.path.exists() else 999.9
+            os.utime(self.path, (mtime, mtime))
         self.saved = True
 
     def close(self) -> None:
@@ -116,7 +123,7 @@ class FakeBook:
 
 
 class FakeBooks:
-    """Mimics xw.App.books. Caches FakeBooks by path."""
+    """Mimics xw.App.books. Caches FakeBooks by path. Touches actual workbook on open."""
     def __init__(self) -> None:
         self.by_path: dict[Path, FakeBook] = {}
 

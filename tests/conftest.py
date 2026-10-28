@@ -1,5 +1,5 @@
 from __future__ import annotations
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +9,7 @@ import sqlite3
 from mtgo_sheets import config, db, tracker
 from mtgo_sheets.models import CardDef
 from tests.helpers import make_card_def
-from tests.xlsx_fakes import FakeApp
+from tests.xlsx_fakes import FakeApp, FakeBook
 
 # Override CONFIG in each module
 mock_cfg = config.load_config(Path(__file__).with_name("mock0.toml"))
@@ -18,8 +18,16 @@ tracker.CONFIG = mock_cfg
 
 
 @pytest.fixture
-def fake_app() -> Any:
-    return FakeApp()
+def fake_app(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Provide a FakeApp and patch xw.App and xw.Book."""
+    app = FakeApp()
+
+    # Route calls like xw.App(visible=False) to this fake app
+    monkeypatch.setattr("mtgo_sheets.tracker.xw.App", lambda *args, **kwargs: app)
+
+    # Make xw.Book() calls use this app instead of launching a new excel insteance
+    monkeypatch.setattr("mtgo_sheets.tracker.xw.Book", FakeBook)
+    return app
 
 @pytest.fixture
 def xlsx_cfg(tmp_path: Path) -> Generator[config.XlsxFile]:
