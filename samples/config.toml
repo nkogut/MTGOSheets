@@ -1,0 +1,88 @@
+start_date = 2023-01-01 # The first day represented in the price dataset - do not change if only using the daily goatbots data
+min_arb_thresh = 0.08 # Min profit to be alerted about an arbitrage opportunity
+skip_first_n_days = 14 # Ignore volatile launch-week prices
+
+# If true: uses debug sheet and logger configuration and disables standard auto-updating
+debug_mode = false
+
+[paths]
+set_legalities = "data/set_legalities.json" # automatically upkept by updater.py
+suggestion_card_blacklist = "data/suggestion_blacklist.json"
+external_prices = "data/external_prices.json" # Optional
+external_prices_hist = "data/external_prices_hist.json" # Optional
+db = "data/prices.db" # SQLite DB containing price histories and card metadata
+
+[lists]
+# Options to be included in the suggestion configuration panel on the sheet
+suggestion_option_keys = ["price_change", "dist_from_min", "lowest_max", "age", "price", "modern_only", "allow_standard", "enabled"]
+
+# Sets to ignore suggestions from. Note: blacklisted cards are stored in a dedicated file (configured above)
+suggestion_set_blacklist = ["van", "j25"] # Ignore Vanguard (Avatars) and Jumpstart 25
+
+[xlsx_defaults]
+# Default values that apply to all sheets unless overridden
+
+# Logging sheet and order processing configuration
+wishlist_dir = "wishlists"
+log_path = "data/transaction_log.xlsx"
+log_cols = ["action", "id", "name", "date", "qty", "price_each", "price_total", "net_each", "net_total", "holdings", "vendor", "notes"]
+
+# Sheet layout
+first_data_row = 3 # Below header row(s)
+
+# Location of cell where cards can be blacklisted by name
+blacklist_row = 1
+blacklist_col = 16
+
+# Location of suggestions configuration box
+suggestions_top_row = 3
+suggestions_left_col = 28
+
+# All column names that match up with the internal keys (see tracker.py) will be updated.
+# Any columns can be removed, and additinal columns may be added that are not automatically updated by these (e.g. "_spacer_1")
+# This does not need to match the spreadsheet header
+cols = [
+    "add_to_blacklist", "name", "set", "notes", "tag", "foil", "id",
+    "date_created", "qty", "purchase_price", "_spacer_1", "sell_price",
+    "delta", "delta_pct", "min", "max", "min_6_mo", "max_6_mo", "7d_delta", "30d_delta", "_spacer_2",
+    "hit", "_spacer_3", "drop", "rise", "_spacer_4", "order",
+]
+# Additional columns to consider if you have connected an external data source: 
+# "buy_from", "sell_to", "buy_price"
+
+# Card sort order
+# Top options have the highest priority
+sort = [
+    ["qty", "<=", 0],
+    ["qty", "==", -1],
+    "tag", 				# ascending
+    "name", 			# ascending
+    "set", 				# ascending
+    "notes",			# ascending
+    ["foil", true] 		# descneding
+]
+
+# File updating settings
+auto_update = true # update when running tracker.py when no specific sheet names are given
+
+# If true: cards in this file will not be considered by the updater when gathering new external prices
+# Existing external price data will still be displayed
+ignore_for_ext_prices = false
+
+[xlsx.debug]
+# Sample test sheet
+path = "debug/debug.xlsx"
+log_path = "debug/debug_log.xlsx"
+auto_update = false
+ignore_for_ext_prices = true
+
+sort = [
+    "name",
+    "set",
+    "notes",
+    "qty"
+]
+
+[xlsx.sample]
+# Sample primary tracker
+path = "sample.xlsx"

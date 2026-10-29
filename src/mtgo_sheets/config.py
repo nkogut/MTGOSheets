@@ -240,6 +240,8 @@ def compile_sort_fn(
 
 def load_config(path: Path | None = None) -> AppConfig:
     target = path or TOML_PATH
+    if not target.exists():
+        target = ROOT / "tests/mock0.toml"
     toml_data = tomllib.loads(target.read_text(encoding="utf-8"))
     return AppConfig(**toml_data)
 

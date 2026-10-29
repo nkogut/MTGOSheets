@@ -48,14 +48,14 @@ An automated Magic: The Gathering Online inventory manager and market tracker wi
    Windows:     `venv\Scripts\activate` \
    macOS/Linux: `source venv/bin/activate` \
 
-3. Install dependencies: \
-	`python -m pip install .`
-
-4. Install the package in editable mode: \
+3. Install the package in editable mode: \
    `python -m pip install -e .`
 
-5. Update the price history database \
+4. Update the price history database \
    `python -m mtgo_sheets.updater`
+
+5. Get started with a pre-configured sheet \
+   Copy `samples/config.toml` and `samples/sample.xlsx` to the project root.
 
 6. Update the sample spreadsheets \
    `python -m mtgo_sheets.tracker`
@@ -63,8 +63,6 @@ An automated Magic: The Gathering Online inventory manager and market tracker wi
 ### Configuration
 
 MTGO Sheets is driven by a central `config.toml` file. Sheet layout and project structure options are available there on a per-sheet and per-project basis.
-
-* **Sample Files Provided:** Check the `samples/` directory for a fully documented `sample_config.toml` and a matching `sample_inventory.xlsx` to immediately see how the system structures workflows.
 
 ### Automation & Daily Updates
 
