@@ -1,21 +1,22 @@
 [project]
 name = "MTGO_Sheets"
-version = "1.0.1"
+version = "1.1.0"
 requires-python = ">=3.13"
 
 dependencies = [
-    "orjson>=3.11.9",
     "numpy>=2.4.6",
+    "orjson>=3.11.9",
+    "pydantic>=2.13.4",
     "requests>=2.34.2",
     "xlwings>=0.35.3",
-    "pydantic>=2.13.4",
 ]
 
 [dependency-groups]
 dev = [
-    "ruff>=0.15.20",
+    "coverage>=7.17.0",
     "pyright>=1.1.411",
     "pytest>=9.0.0",
+    "ruff>=0.15.20",
 ]
 
 [tool.pytest.ini_options]

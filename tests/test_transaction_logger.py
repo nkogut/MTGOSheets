@@ -1,3 +1,5 @@
+# type: ignore[arg-type]
+
 import datetime
 from pathlib import Path
 
@@ -40,7 +42,7 @@ def test_logger_initializes_fresh_workbook_and_appends_transactions(
     monkeypatch.setattr("mtgo_sheets.tracker.xw.Book", FakeBook)
     log_path = tmp_path / "new_log.xlsx"
 
-    logger = TransactionLogger(log_path, LOG_COLS, fake_app)  # type: ignore[arg-type]
+    logger = TransactionLogger(log_path, LOG_COLS, fake_app)
     assert log_path.exists()
     assert logger.stored_data == []
 
@@ -71,7 +73,7 @@ def test_logger_loads_existing_workbook_and_finds_last_transaction(tmp_path: Pat
         [datetime.date(2026, 1, 22), "sell", 123, "Lightning Bolt", 0.005, 0.005, 0.003, 0.003, 1, "goat", 1, "new_123"],
     ]
 
-    logger = TransactionLogger(log_path, LOG_COLS, fake_app)  # type: ignore[arg-type]
+    logger = TransactionLogger(log_path, LOG_COLS, fake_app)
 
     assert len(logger.stored_data) == 3
 
@@ -102,7 +104,7 @@ def test_logger_revises_existing_transaction(tmp_path: Path, fake_app: FakeApp) 
         [datetime.date(2026, 10, 23), "buy", 456, "Brainstorm", 0.010, 0.020, None, None, 2, "goat", 2, "other card"],
     ]
 
-    logger = TransactionLogger(log_path, LOG_COLS, fake_app)  # type: ignore[arg-type]
+    logger = TransactionLogger(log_path, LOG_COLS, fake_app)
     old_tx = logger.get_last_transaction(123)
     assert old_tx is not None
     assert old_tx.action == "buy"
@@ -145,7 +147,7 @@ def test_logger_revises_existing_transaction(tmp_path: Path, fake_app: FakeApp) 
 def test_logger_rejects_operations_after_close(tmp_path: Path, fake_app: FakeApp) -> None:
     """Verify calling Logger methods after close() raises RuntimeError to protect the integrity of the log file."""
     log_path = tmp_path / "closed_log.xlsx"
-    logger = TransactionLogger(log_path, LOG_COLS, fake_app) # type: ignore[arg-type]
+    logger = TransactionLogger(log_path, LOG_COLS, fake_app)
     logger.close()
 
     with pytest.raises(RuntimeError, match="The logger is closed"):

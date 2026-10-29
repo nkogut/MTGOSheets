@@ -682,7 +682,7 @@ def parse_cards_from_sheet(conn: sqlite3.Connection, ws: xw.Sheet) -> list[CardR
     Try to determine ids for cards that don't have one listed.
     """
     file = _CURRENT_XLSX.get()
-    last_row = ws.range((ws.cells.last_cell.row, file.cols.index("id"))).end("up").row
+    last_row = ws.range((ws.cells.last_cell.row, file.cols.index("id") + 1)).end("up").row
     rows = ws.range(
         (file.first_data_row, 1),
         (last_row, len(file.cols)),
@@ -690,6 +690,10 @@ def parse_cards_from_sheet(conn: sqlite3.Connection, ws: xw.Sheet) -> list[CardR
 
     if last_row < file.first_data_row:
         return []
+
+    if last_row == file.first_data_row:
+        # If there is only 1 row xlwings will return a 1D list. Force rows to always be 2D
+        rows = [rows]
 
     parsed_vals: list[CardRow] = []
 
@@ -716,7 +720,7 @@ def parse_cards_from_sheet(conn: sqlite3.Connection, ws: xw.Sheet) -> list[CardR
 def create_entries_from_rows(
     conn: sqlite3.Connection,
     card_rows: list[CardRow],
-    ext_prices: ExtPriceMap | None,
+    ext_prices: ExtPriceMap | None = None,
 ) -> tuple[list[WatchlistEntry], list[CardRow]]:
     """Gather price lists and card definitions for all CardRows and instantiates each as a WatchlistEntry.
 
@@ -868,14 +872,14 @@ def update_blacklist(ws: xw.Sheet, card_rows: list[CardRow]) -> tuple[list[str],
 def write_back_card_rows(ws: xw.Sheet, wb: xw.Book, output_rows: list[CardRow]) -> None:
     """Update spreadsheet with the new card rows."""
     file = _CURRENT_XLSX.get()
-    last_row = ws.range((ws.cells.last_cell.row, file.cols.index("id"))).end("up").row
+    last_row = ws.range((ws.cells.last_cell.row, file.cols.index("id") + 1)).end("up").row
     if last_row >= file.first_data_row:
         ws.range(
             (file.first_data_row, 1),
             (last_row, len(file.cols)),
         ).clear_contents()
 
-    output = [[row.get(col, "") for col in file.cols] for row in output_rows ]
+    output = [[row.get(col, "") for col in file.cols] for row in output_rows]
     ws.range((file.first_data_row, 1)).value = output
     ws.cells(1, 2).value = f"Last updated: {CONFIG.today}"
 

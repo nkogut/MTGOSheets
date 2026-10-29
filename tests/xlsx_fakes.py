@@ -107,15 +107,20 @@ class FakeBook:
         self.sheets = [FakeSheet()]
         self.saved = False
         self.closed = False
+        self.simulate_locked = False
 
     def save(self, path: Path | None = None) -> None:
         target = path or self.path
         if target:
             self.path = Path(target)
             self.path.parent.mkdir(parents=True, exist_ok=True)
+            mtime = self.path.stat().st_mtime if self.path.exists() else 1.0
             self.path.write_bytes(b"fake-xlsx-content")
-            mtime = self.path.stat().st_mtime + 1.0 if self.path.exists() else 999.9
-            os.utime(self.path, (mtime, mtime))
+
+            if self.simulate_locked:
+                os.utime(self.path, (mtime, mtime))
+            else:
+                os.utime(self.path, (mtime, mtime + 1.0))
         self.saved = True
 
     def close(self) -> None:

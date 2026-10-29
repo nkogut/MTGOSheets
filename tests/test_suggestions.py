@@ -1,3 +1,5 @@
+# type: ignore[arg-type]
+
 from pathlib import Path
 import sqlite3
 from typing import Any
@@ -209,14 +211,14 @@ def test_parse_and_initialize_sheet_for_opts(xlsx_cfg: XlsxFile) -> None:
     ws = FakeSheet()
 
     # Initialize suggestion opts
-    initial_opts = parse_suggestion_opts_from_sheet(ws)  # type: ignore[arg-type]
+    initial_opts = parse_suggestion_opts_from_sheet(ws)
     assert ws.cells(xlsx_cfg.suggestions_top_row - 1, xlsx_cfg.suggestions_left_col).value == "Suggestion Args"
     assert all(v is None for v in initial_opts.values())
 
     # Set opt values on the sheet and parse
     ws.cells(xlsx_cfg.suggestions_top_row, xlsx_cfg.suggestions_left_col + 1).value = True
     ws.cells(xlsx_cfg.suggestions_top_row + 3, xlsx_cfg.suggestions_left_col + 1).value = "0.005;0.020"
-    parsed_opts = parse_suggestion_opts_from_sheet(ws)  # type: ignore[arg-type]
+    parsed_opts = parse_suggestion_opts_from_sheet(ws)
     assert parsed_opts["enabled"] is True
     assert parsed_opts["price"] == "0.005;0.020"
 
@@ -232,7 +234,7 @@ def test_parse_and_initialize_sheet_for_opts(xlsx_cfg: XlsxFile) -> None:
         {"id": 2010, "name": "2010_Mod", "add_to_blacklist": False},
         {"id": 2910, "name": "29xx_Dup", "add_to_blacklist": True},
     ]
-    blacklist, remaining = update_blacklist(ws, card_rows)  # type: ignore[arg-type]
+    blacklist, remaining = update_blacklist(ws, card_rows)
 
     assert set(blacklist) == {"Grief", "Fury", "29xx_Dup", "Old Blacklisted Card"}
     assert [r["id"] for r in remaining] == [2010]
